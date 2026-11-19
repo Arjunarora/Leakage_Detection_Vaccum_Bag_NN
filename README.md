@@ -1,81 +1,49 @@
-# Leakage Detection in Vacuum Bagging using Neural Networks
+# Leakage Detection in Vacuum Bagging with Neural Networks
 
-## Overview
-This project aims to develop a neural network-based model for detecting leakage coordinates in vacuum bagging processes. The model predicts leakage coordinates from normalized flow rates, incorporating prior knowledge through equivariance conditions to improve accuracy.
+Locating a leak in a vacuum bag (used in composite manufacturing) from the flow rates of **four mass-flow controllers (MFC)** placed around the part. A neural network maps the four normalised flow rates to the 2-D leak coordinates `(y1, y2)`.
 
-## Table of Contents
-- [Introduction](#introduction)
-- [Dataset](#dataset)
-- [Methodology](#methodology)
-- [Equivariance Conditions](#equivariance-conditions)
-- [Usage](#usage)
-- [Results](#results)
-- [Future Work](#future-work)
-- [Contributors](#contributors)
-- [License](#license)
+The problem has a built-in symmetry: rotating or mirroring the setup permutes the sensors and rotates the leak position the same way. The project compares a **standard MLP** with an **equivariant network** whose layers bake that symmetry in, and with **data augmentation** that adds the seven rotated/flipped copies of every example.
 
-## Introduction
-In vacuum bagging processes, detecting leakage accurately is crucial. The project focuses on predicting the coordinates of leakages using a parameterized function \( f_θ \). The model is trained on data where the fourth sensor (MFC4) had a malfunction, causing higher values than the other sensors. The project explores both standard neural network architectures and those incorporating equivariance conditions.
+## Approach
 
-## Dataset
-The project uses two training datasets:
-- `leakage_dataset_train_100.csv` (100 samples)
-- `leakage_dataset_train_1000.csv` (1000 samples)
+1. **Sensor correction:** sensor 4 (MFC4) malfunctioned and reads systematically high. It is corrected by subtracting the mean of the other three sensors.
+2. **Standard MLP** (Keras): baseline, then hyperparameter search with KerasTuner over width (32–512), depth (1–5) and learning rate. Loss: mean absolute error.
+3. **Data augmentation:** each `(x, y)` is extended with rotations (90°, 180°, 270°) and vertical flips: `y90 = (y2, −y1)`, `y_flip = (−y1, y2)`.
+4. **Equivariant network:** custom `EquivariantHiddenLayer` / `EquivariantOutputLayer` with tied weights, so predictions transform consistently under the symmetry group.
+5. **Evaluation:** validation MAE plus hand-built symmetric test sets that check whether predictions rotate along with the inputs.
 
-Each dataset contains normalized flow rates and corresponding leakage coordinates.
+## Results (from the original run)
 
-## Methodology
-The project involves:
-1. **Data Preprocessing**: Handling sensor malfunctions and normalizing data.
-2. **Network Architecture**: Implementing both standard and equivariant neural network architectures.
-3. **Training**: Training the models on both datasets with and without data augmentation.
-4. **Evaluation**: Comparing the performance of the models using validation and test datasets.
+| Model | Training data | Best validation MAE |
+|---|---|---|
+| Standard MLP, tuned | 1000 samples | 0.174 |
+| Standard MLP, tuned | 1000 samples + augmentation | 0.298 |
 
-## Equivariance Conditions
-The model incorporates prior knowledge through equivariance conditions. These conditions ensure that for any given set of flow rates, the predicted leakage coordinates remain consistent under rotations and flips. This is achieved through:
-- Rotations by 90°, 180°, and 270°
-- Vertical flips
-- Combinations of rotations and flips
+Augmentation *hurt* the tuned MLP in this run. This is very likely caused by a bug in the original augmentation code (see known issues below). The equivariant model was trained, but its validation scores weren't recorded in the notebook.
 
-This enhances the model's robustness and accuracy.
+## Known issues (to-do)
 
-## Usage
-To run the project, follow these steps:
+- `augment_data` applies `np.rot90` to the whole data matrix, which transposes it (`(4, 1000)` instead of `(1000, 4)`). A rotation should instead **cyclically shift the four sensor columns** and rotate `y`. The correct shift direction depends on the sensor layout, so it's left for a re-run.
+- `accuracy` is logged as a metric, but it is meaningless for regression. MAE is the metric that matters.
+- `data/leakage_dataset_validation_1000.csv` isn't included in the repo.
 
-1. **Clone the repository**:
-    ```sh
-    git clone https://github.com/Arjunarora/Leakage_Detection_Vaccum_Bag_NN.git
-    cd Leakage_Detection_Vaccum_Bag_NN
-    ```
+## Repository structure
 
-2. **Install the required libraries**:
-    ```sh
-    pip install -r requirements.txt
-    ```
+```
+├── leakage_detection.ipynb   # full workflow: EDA, MLP, tuning, augmentation, equivariant model
+├── data/                     # training sets with 100 and 1000 samples
+└── models/                   # saved models (created when you run the notebook, not tracked)
+```
 
-3. **Run the Jupyter Notebook**:
-    ```sh
-    jupyter notebook Leakage_detection_final.ipynb
-    ```
+## Run
 
-4. **Train the model**:
-    - Follow the steps in the notebook to preprocess the data, define the network architecture, and train the model.
+```bash
+pip install -r requirements.txt
+jupyter notebook leakage_detection.ipynb
+```
 
-## Results
-The performance of the models is evaluated based on their accuracy in predicting leakage coordinates. The equivariant model, with its additional prior knowledge, is expected to outperform the standard model, especially in scenarios with limited training data.
-
-## Future Work
-Future improvements could include:
-- Testing with larger datasets.
-- Further optimizing network architectures.
-- Applying the model to real-world vacuum bagging systems.
-
-## Contributors
-- **Arjun Arora** (Project Lead)
+Originally developed on Google Colab. The Drive-mount cell is commented out, and paths point to `data/` and `models/`.
 
 ## License
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
 
----
-
-We welcome contributions! Please read the [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on how to contribute to this project.
+MIT

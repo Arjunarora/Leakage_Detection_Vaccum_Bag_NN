@@ -1,0 +1,7 @@
+tensorflow>=2.10
+keras-tuner
+pandas
+numpy
+scikit-learn
+matplotlib
+jupyter
